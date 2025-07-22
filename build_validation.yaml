@@ -1,0 +1,46 @@
+trigger: none
+
+pr:
+  branches:
+    include:
+    - master
+  autoCancel: true
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: ValidateAndPlan
+  jobs:
+  - job: Terraform_Validation
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - checkout: self
+
+    - script: |
+        curl -fsSL https://releases.hashicorp.com/terraform/1.7.3/terraform_1.7.3_linux_amd64.zip -o terraform.zip
+        unzip terraform.zip
+        sudo mv terraform /usr/local/bin/
+      displayName: 'Install Terraform v1.7.3'
+
+    - script: |
+        terraform fmt -recursive
+      displayName: 'Format Terraform Configuration'
+
+    - script: |
+        terraform init -backend-config=environments/$(EnvironmentName)/backend.tf
+      displayName: 'Initialize Terraform'
+
+    - script: |
+        terraform validate
+      displayName: 'Validate Terraform Configuration'
+
+    - script: |
+        make tf-plan-ci env=$(EnvironmentName)
+      displayName: 'Run Terraform Plan'
+      env:
+        ARM_CLIENT_ID: $(ARM_CLIENT_ID)
+        ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
+        ARM_TENANT_ID: $(ARM_TENANT_ID)
+        ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
