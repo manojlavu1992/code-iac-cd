@@ -1,0 +1,72 @@
+## This file wil likely be deleted later, retaining for now incase I need it for future dev
+## My original intent was to have a single pipeline that required user input for which environment was being deployed
+## however, best-practice suggests that each environment should have its own pipeline. As a result, I switched to that method.
+
+trigger:
+  branches:
+    include:
+      - aptum-changes-first-draft
+
+parameters:
+  - name: environment
+    type: string
+
+variables:
+  - group: TerraformSecrets-${{ parameters.environment }}
+
+stages:
+  - stage: TerraformPlan
+    displayName: Terraform Plan
+    jobs:
+      - job: Plan
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: AzureCLI@2
+            displayName: "Run Terraform Plan"
+            inputs:
+              azureSubscription: 'AzureRM-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                make tf-plan env=${{ parameters.environment }}
+
+  - stage: Approval
+    displayName: 'Approval Before Creation'
+    dependsOn: TerraformPlan
+    pool: server
+    jobs:
+      - job: ManualApproval
+        steps:
+          - task: ManualValidation@1
+            inputs:
+              notifyUsers: 'marc.hosang@aptum.com'
+              instructions: 'Review Terraform plan before applying changes.'
+              onTimeout: 'reject'
+              timeout: '1d'
+
+  - stage: TerraformApply
+    displayName: Terraform Apply
+    dependsOn: Approval
+    condition: succeeded()
+    jobs:
+      - job: Apply
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: AzureCLI@2
+            displayName: "Run Terraform Apply"
+            inputs:
+              azureSubscription: 'AzureRM-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                make tf-apply env=${{ parameters.environment }}

@@ -1,0 +1,62 @@
+trigger:
+  branches:
+    include:
+      - aptum-changes-first-draft 
+
+stages:
+  - stage: TerraformPlan
+    displayName: Terraform Plan - AptumDev 
+    jobs:
+      - job: Plan
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: AzureCLI@2
+            displayName: "Run Terraform Plan"
+            inputs:
+              ## Below key is misleading. Value should be name of service connection in Azure DevOps
+              azureSubscription: 'AzureRM-Manual' 
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                make tf-plan env=aptumdev
+
+  - stage: Approval
+    displayName: 'Approval Before Creation - AptumDev'
+    dependsOn: TerraformPlan
+    pool: server
+    jobs:
+      - job: ManualApproval
+        steps:
+          - task: ManualValidation@1
+            inputs:
+              notifyUsers: 'marc.hosang@aptum.com'  ## Add/change approval contacts per env if needed
+              instructions: 'Review Terraform plan before applying changes.'
+              onTimeout: 'reject'
+              timeout: '1d'
+
+#  - stage: TerraformApply
+#    displayName: Terraform Apply - Internal
+#    dependsOn: Approval
+#    condition: succeeded()
+#    jobs:
+#      - job: Apply
+#        pool:
+#          vmImage: ubuntu-latest
+#        steps:
+#          - task: TerraformInstaller@0
+#            inputs:
+#              terraformVersion: 'latest'
+#
+#          - task: AzureCLI@2
+#            displayName: "Run Terraform Apply"
+#            inputs:
+#              azureSubscription: 'AZURERM-APTUMDEV' ## Should match value for Plan stage
+#              scriptType: 'bash'
+#              scriptLocation: 'inlineScript'
+#              inlineScript: |
+#                make tf-apply env=aptumdev

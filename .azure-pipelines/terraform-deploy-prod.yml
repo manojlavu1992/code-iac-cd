@@ -1,0 +1,65 @@
+trigger:
+  branches:
+    include:
+      - aptum-changes-first-draft ## Currently set to my branch while development finalizes
+
+variables:
+  - group: TerraformSecrets-prod
+
+stages:
+  - stage: TerraformPlan
+    displayName: Terraform Plan - Production
+    jobs:
+      - job: Plan
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: AzureCLI@2
+            displayName: "Run Terraform Plan"
+            inputs:
+              ## Below key is misleading. Value should be name of service connection in Azure DevOps
+              azureSubscription: 'AzureRM-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                make tf-plan env=prod
+
+  - stage: Approval
+    displayName: 'Approval Before Creation - Production'
+    dependsOn: TerraformPlan
+    pool: server
+    jobs:
+      - job: ManualApproval
+        steps:
+          - task: ManualValidation@1
+            inputs:
+              notifyUsers: 'marc.hosang@aptum.com'  ## Add/change approval contacts per env if needed
+              instructions: 'Review Terraform plan before applying changes.'
+              onTimeout: 'reject'
+              timeout: '1d'
+
+#  - stage: TerraformApply
+#    displayName: Terraform Apply - Production
+#    dependsOn: Approval
+#    condition: succeeded()
+#    jobs:
+#      - job: Apply
+#        pool:
+#          vmImage: ubuntu-latest
+#        steps:
+#          - task: TerraformInstaller@0
+#            inputs:
+#              terraformVersion: 'latest'
+#
+#          - task: AzureCLI@2
+#            displayName: "Run Terraform Apply"
+#            inputs:
+#              azureSubscription: 'AzureRM-Connection'  # ✅ Match to the env’s Service Connection
+#              scriptType: 'bash'
+#              scriptLocation: 'inlineScript'
+#              inlineScript: |
+#                make tf-apply env=prod  # ✅ Change `internal` to `staging` or `prod`
